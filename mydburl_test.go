@@ -4,14 +4,17 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/cli/safeexec"
 	"github.com/go-sql-driver/mysql"
-	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/v3"
 	"github.com/pepabo/mydburl"
 )
 
@@ -43,7 +46,8 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 			fmt.Sprintf("MYSQL_DATABASE=%s", mysqlDatabase),
 		},
 		Mounts: []string{
-			fmt.Sprintf("%s:/docker-entrypoint-initdb.d/initdb.sql", filepath.Join(wd, "testdata", "docker-entrypoint-initdb.d", "initdb.sql")),
+			fmt.Sprintf("%s:/etc/mysql/conf.d", filepath.Join(wd, "testdata", "conf.d")),
+			fmt.Sprintf("%s:/docker-entrypoint-initdb.d", filepath.Join(wd, "testdata", "docker-entrypoint-initdb.d")),
 			fmt.Sprintf("%s:/etc/certs", filepath.Join(wd, "testdata", "certs")),
 		},
 		Cmd: []string{
@@ -51,9 +55,6 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 			"--character-set-server=utf8mb4",
 			"--collation-server=utf8mb4_unicode_ci",
 			"--require_secure_transport=ON",
-			"--ssl-ca=/etc/certs/root-ca.pem",
-			"--ssl-cert=/etc/certs/server-cert.pem",
-			"--ssl-key=/etc/certs/server-key.pem",
 		},
 	}
 	my, err := pool.RunWithOptions(opt)
@@ -61,23 +62,47 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 		t.Fatalf("Could not start resource: %s", err)
 	}
 	t.Cleanup(func() {
+		if os.Getenv("DEBUG") != "" {
+			c, err := safeexec.LookPath("docker")
+			if err != nil {
+				t.Error(err)
+			}
+			cmd := exec.Command(c, "logs", my.Container.ID)
+			b, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Error(err)
+			}
+			fmt.Println("------------")
+			fmt.Println(string(b))
+			fmt.Println("------------")
+		}
+
 		if err := pool.Purge(my); err != nil {
 			t.Fatalf("Could not purge resource: %s", err)
 		}
 	})
 
-	var port string
+	var port, ca, cert, key string
 	tlsKey := "testcontainer"
-	ca, cert, key := registerTlsConfig(t, tlsKey)
 	if err := pool.Retry(func() error {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 		var err error
+		ca, cert, key, err = registerTlsConfig(tlsKey)
+		if err != nil {
+			t.Log(err)
+			return err
+		}
 		port = my.GetPort("3306/tcp")
 		db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@(localhost:%s)/%s?&parseTime=true&tls=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, tlsKey))
 		if err != nil {
+			t.Log(err)
 			return err
 		}
-		return db.Ping()
+		if err := db.Ping(); err != nil {
+			t.Log(err)
+			return err
+		}
+		return nil
 	}); err != nil {
 		t.Fatalf("Could not connect to database: %s", err)
 	}
@@ -85,7 +110,7 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 	return port, ca, cert, key
 }
 
-func registerTlsConfig(t *testing.T, tlsKey string) (string, string, string) {
+func registerTlsConfig(tlsKey string) (string, string, string, error) {
 	ca := "testdata/certs/root-ca.pem"
 	cert := "testdata/certs/client-cert.pem"
 	key := "testdata/certs/client-key.pem"
@@ -93,15 +118,15 @@ func registerTlsConfig(t *testing.T, tlsKey string) (string, string, string) {
 	rootCertPool := x509.NewCertPool()
 	pem, err := os.ReadFile(ca)
 	if err != nil {
-		t.Fatal(err)
+		return "", "", "", err
 	}
 	if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-		t.Fatal("Failed to append PEM.")
+		return "", "", "", errors.New("Failed to append PEM.")
 	}
 	clientCert := make([]tls.Certificate, 0, 1)
 	certs, err := tls.LoadX509KeyPair(cert, key)
 	if err != nil {
-		t.Fatal(err)
+		return "", "", "", err
 	}
 	clientCert = append(clientCert, certs)
 	if err := mysql.RegisterTLSConfig(tlsKey, &tls.Config{
@@ -109,10 +134,10 @@ func registerTlsConfig(t *testing.T, tlsKey string) (string, string, string) {
 		Certificates: clientCert,
 		MinVersion:   tls.VersionTLS12,
 	}); err != nil {
-		t.Fatal(err)
+		return "", "", "", err
 	}
 
-	return ca, cert, key
+	return ca, cert, key, nil
 }
 
 func TestOpen(t *testing.T) {

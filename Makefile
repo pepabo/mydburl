@@ -5,10 +5,11 @@ OPENSSL_CLIENT = $(OPENSSL_SUBJ)/CN=fake-client
 
 default: test
 
-ci: depsdev
+ci: test
 
 test: cert
-	go test ./... -coverprofile=coverage.out -covermode=count
+	chmod +r testdata/certs/*.pem
+	go test -v ./... -coverprofile=coverage.out -covermode=count
 
 lint:
 	golangci-lint run ./...
@@ -22,6 +23,7 @@ root-ca:
 server-cert:
 	openssl req -newkey rsa:2048 -sha512 -days 3600 -nodes -subj "$(OPENSSL_SERVER)" -keyout testdata/certs/server-key.pem -out testdata/certs/server-req.pem
 	openssl rsa -in testdata/certs/server-key.pem -out testdata/certs/server-key.pem
+	openssl rsa -in testdata/certs/server-key.pem -out testdata/certs/server-key.pem -traditional > /dev/null 2>&1 || true # for OpenSSL v3
 	openssl x509 -sha512 -req -in testdata/certs/server-req.pem -days 3600 -CA testdata/certs/root-ca.pem -CAkey testdata/certs/root-ca-key.pem -set_serial 01 -out testdata/certs/server-cert.pem -extfile testdata/openssl.cnf
 	openssl verify -CAfile testdata/certs/root-ca.pem testdata/certs/server-cert.pem
 
@@ -32,6 +34,11 @@ client-cert:
 	openssl verify -CAfile testdata/certs/root-ca.pem testdata/certs/client-cert.pem
 
 depsdev:
-	go install github.com/Songmu/ghch/cmd/ghch@latest
 	go install github.com/Songmu/gocredits/cmd/gocredits@latest
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+prerelease_for_tagpr: depsdev
+	go mod tidy
+	gocredits -w .
+	git add CHANGELOG.md CREDITS go.mod go.sum
+
+.PHONY: default test
