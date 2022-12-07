@@ -6,12 +6,14 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/cli/safeexec"
 	"github.com/go-sql-driver/mysql"
-	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/v3"
 	"github.com/pepabo/mydburl"
 )
 
@@ -61,6 +63,21 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 		t.Fatalf("Could not start resource: %s", err)
 	}
 	t.Cleanup(func() {
+		if os.Getenv("DEBUG") != "" {
+			c, err := safeexec.LookPath("docker")
+			if err != nil {
+				t.Error(err)
+			}
+			cmd := exec.Command(c, "logs", my.Container.ID)
+			b, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Error(err)
+			}
+			fmt.Println("------------")
+			fmt.Println(string(b))
+			fmt.Println("------------")
+		}
+
 		if err := pool.Purge(my); err != nil {
 			t.Fatalf("Could not purge resource: %s", err)
 		}
@@ -70,7 +87,7 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 	tlsKey := "testcontainer"
 	ca, cert, key := registerTlsConfig(t, tlsKey)
 	if err := pool.Retry(func() error {
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 30)
 		var err error
 		port = my.GetPort("3306/tcp")
 		db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@(localhost:%s)/%s?&parseTime=true&tls=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, tlsKey))
