@@ -70,7 +70,7 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 	tlsKey := "testcontainer"
 	ca, cert, key := registerTlsConfig(t, tlsKey)
 	if err := pool.Retry(func() error {
-		time.Sleep(time.Second * 5)
+		time.Sleep(time.Second * 10)
 		var err error
 		port = my.GetPort("3306/tcp")
 		db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@(localhost:%s)/%s?&parseTime=true&tls=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, tlsKey))
