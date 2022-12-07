@@ -5,7 +5,7 @@ OPENSSL_CLIENT = $(OPENSSL_SUBJ)/CN=fake-client
 
 default: test
 
-ci: depsdev test
+ci: test
 
 test: cert
 	go test ./... -coverprofile=coverage.out -covermode=count
