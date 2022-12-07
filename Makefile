@@ -32,6 +32,11 @@ client-cert:
 	openssl verify -CAfile testdata/certs/root-ca.pem testdata/certs/client-cert.pem
 
 depsdev:
-	go install github.com/Songmu/ghch/cmd/ghch@latest
 	go install github.com/Songmu/gocredits/cmd/gocredits@latest
-	go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+prerelease_for_tagpr: depsdev
+	go mod tidy
+	gocredits -w .
+	git add CHANGELOG.md CREDITS go.mod go.sum
+
+.PHONY: default test
