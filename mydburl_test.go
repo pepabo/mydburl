@@ -46,8 +46,6 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 			fmt.Sprintf("MYSQL_DATABASE=%s", mysqlDatabase),
 		},
 		Mounts: []string{
-			fmt.Sprintf("%s:/etc/mysql/conf.d", filepath.Join(wd, "testdata", "conf.d")),
-			fmt.Sprintf("%s:/docker-entrypoint-initdb.d", filepath.Join(wd, "testdata", "docker-entrypoint-initdb.d")),
 			fmt.Sprintf("%s:/etc/certs", filepath.Join(wd, "testdata", "certs")),
 		},
 		Cmd: []string{
@@ -55,6 +53,9 @@ func createMySQLContainer(t *testing.T) (string, string, string, string) {
 			"--character-set-server=utf8mb4",
 			"--collation-server=utf8mb4_unicode_ci",
 			"--require_secure_transport=ON",
+			"--ssl-ca=/etc/certs/root-ca.pem",
+			"--ssl-cert=/etc/certs/server-cert.pem",
+			"--ssl-key=/etc/certs/server-key.pem",
 		},
 	}
 	my, err := pool.RunWithOptions(opt)
