@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/cli/safeexec v1.0.0
 	github.com/go-sql-driver/mysql v1.7.0
+	github.com/google/go-cmp v0.5.5
 	github.com/ory/dockertest/v3 v3.9.1
 	github.com/xo/dburl v0.13.0
 )
