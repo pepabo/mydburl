@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,6 +119,12 @@ func TestRegisterTlsConfig(t *testing.T) {
 					return
 				}
 				t.Error(err)
+			}
+			if strings.Contains(u.String(), "sslCa") {
+				t.Error("sslCa should be removed")
+			}
+			if !strings.Contains(u.String(), "tls") {
+				t.Error("tls should be added")
 			}
 			db, err := sql.Open(u.Driver, u.DSN)
 			if err != nil {
