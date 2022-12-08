@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 
@@ -57,6 +58,9 @@ func Parse(urlstr string) (*URL, error) {
 	}
 	if ca == "" && cert == "" && key == "" {
 		return u, nil
+	}
+	if u.Driver != "mysql" {
+		return nil, fmt.Errorf("mydburl support only mysql: %s", u.Driver)
 	}
 	if u.Query().Has(tlsKey) {
 		return nil, errors.New("tls cannot be used with sslCa, sslCert, or sslKey")

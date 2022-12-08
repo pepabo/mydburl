@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,8 +15,11 @@ import (
 
 	"github.com/cli/safeexec"
 	"github.com/go-sql-driver/mysql"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/ory/dockertest/v3"
 	"github.com/pepabo/mydburl"
+	"github.com/xo/dburl"
 )
 
 const (
@@ -24,6 +28,74 @@ const (
 	mysqlPassword     = "mypass"
 	mysqlDatabase     = "testdb"
 )
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		dsn     string
+		want    *mydburl.URL
+		wantErr bool
+	}{
+		{"mysql://username:password@localhost:3306/testdb?parseTime=true", newURL(t, "mysql://username:password@localhost:3306/testdb?parseTime=true", "", "", ""), false},
+		{"mysql://username:password@localhost:3306/testdb?tls=true", newURL(t, "mysql://username:password@localhost:3306/testdb?tls=true", "", "", ""), false},
+		{"mysql://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem", newURL(t, "mysql://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem", "testdata/certs/root-ca.pem", "", ""), false},
+		{"my://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem", newURL(t, "my://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem", "testdata/certs/root-ca.pem", "", ""), false},
+		{"mysql://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem&sslCert=testdata/certs/client-cert.pem&sslKey=testdata/certs/client-key.pem", newURL(t, "mysql://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem&sslCert=testdata/certs/client-cert.pem&sslKey=testdata/certs/client-key.pem", "testdata/certs/root-ca.pem", "testdata/certs/client-cert.pem", "testdata/certs/client-key.pem"), false},
+		{"mysql://username:password@localhost:3306/testdb?sslCa=path/to/notexist.pem", nil, true},
+		{"mysql://username:password@localhost:3306/testdb?tls=true&sslCa=testdata/certs/root-ca.pem", nil, true},
+		{"mysql://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem&sslCert=testdata/certs/client-cert.pem", nil, true},
+		{"pg://username:password@localhost:3306/testdb", newURL(t, "pg://username:password@localhost:3306/testdb", "", "", ""), false},
+		{"pg://username:password@localhost:3306/testdb?sslCa=testdata/certs/root-ca.pem", nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dsn, func(t *testing.T) {
+			got, err := mydburl.Parse(tt.dsn)
+			if err != nil {
+				if tt.wantErr {
+					return
+				}
+				t.Error(err)
+			}
+			if tt.wantErr {
+				t.Error("want err")
+			}
+			dopts := []cmp.Option{
+				cmpopts.IgnoreUnexported(dburl.URL{}, url.Userinfo{}),
+			}
+			if diff := cmp.Diff(got, tt.want, dopts...); diff != "" {
+				t.Errorf("%s", diff)
+			}
+		})
+	}
+}
+
+func TestOpen(t *testing.T) {
+	port, ca, cert, key := createMySQLContainer(t)
+	tests := []struct {
+		dsn     string
+		wantErr bool
+	}{
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true", mysqlUser, mysqlPassword, port, mysqlDatabase), true},
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true&sslCa=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, ca), false},
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true&sslCa=%s&sslCert=%s&sslKey=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, ca, cert, key), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dsn, func(t *testing.T) {
+			db, err := mydburl.Open(tt.dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Ping(); err != nil {
+				if tt.wantErr {
+					return
+				}
+				t.Error(err)
+			}
+			if tt.wantErr {
+				t.Error("want err")
+			}
+		})
+	}
+}
 
 // return port, ca, cert, key
 func createMySQLContainer(t *testing.T) (string, string, string, string) {
@@ -141,14 +213,15 @@ func registerTlsConfig(tlsKey string) (string, string, string, error) {
 	return ca, cert, key, nil
 }
 
-func TestOpen(t *testing.T) {
-	port, ca, cert, key := createMySQLContainer(t)
-	dsn := fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true&sslCa=%s&sslCert=%s&sslKey=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, ca, cert, key)
-	db, err := mydburl.Open(dsn)
+func newURL(t *testing.T, urlstr, ca, cert, key string) *mydburl.URL {
+	v, err := dburl.Parse(urlstr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Ping(); err != nil {
-		t.Error(err)
+	return &mydburl.URL{
+		URL:     *v,
+		SslCa:   ca,
+		SslCert: cert,
+		SslKey:  key,
 	}
 }
