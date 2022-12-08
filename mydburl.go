@@ -87,17 +87,7 @@ func Open(urlstr string) (*sql.DB, error) {
 	if err := u.RegisterTlsConfig(DefaultTlsKey); err != nil {
 		return nil, err
 	}
-	uu, err := url.Parse(u.String())
-	if err != nil {
-		return nil, err
-	}
-	q := uu.Query()
-	q.Add(tlsKey, DefaultTlsKey)
-	q.Del(sslCaKey)
-	q.Del(sslCertKey)
-	q.Del(sslKeyKey)
-	uu.RawQuery = q.Encode()
-	return dburl.Open(uu.String())
+	return dburl.Open(u.String())
 }
 
 func (u *URL) RegisterTlsConfig(k string) error {
@@ -122,5 +112,23 @@ func (u *URL) RegisterTlsConfig(k string) error {
 		clientCert = append(clientCert, certs)
 		tc.Certificates = clientCert
 	}
-	return mysql.RegisterTLSConfig(k, tc)
+	if err := mysql.RegisterTLSConfig(k, tc); err != nil {
+		return err
+	}
+	uu, err := url.Parse(u.String())
+	if err != nil {
+		return err
+	}
+	q := uu.Query()
+	q.Add(tlsKey, DefaultTlsKey)
+	q.Del(sslCaKey)
+	q.Del(sslCertKey)
+	q.Del(sslKeyKey)
+	uu.RawQuery = q.Encode()
+	uuu, err := dburl.Parse(uu.String())
+	if err != nil {
+		return err
+	}
+	u.URL = *uuu
+	return nil
 }
