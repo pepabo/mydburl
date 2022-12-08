@@ -97,6 +97,39 @@ func TestOpen(t *testing.T) {
 	}
 }
 
+func TestRegisterTlsConfig(t *testing.T) {
+	port, ca, cert, key := createMySQLContainer(t)
+	tests := []struct {
+		dsn     string
+		wantErr bool
+	}{
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true", mysqlUser, mysqlPassword, port, mysqlDatabase), true},
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true&sslCa=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, ca), false},
+		{fmt.Sprintf("mysql://%s:%s@localhost:%s/%s?parseTime=true&sslCa=%s&sslCert=%s&sslKey=%s", mysqlUser, mysqlPassword, port, mysqlDatabase, ca, cert, key), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.dsn, func(t *testing.T) {
+			u, err := mydburl.Parse(tt.dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := u.RegisterTlsConfig("test"); err != nil {
+				if tt.wantErr {
+					return
+				}
+				t.Error(err)
+			}
+			db, err := sql.Open(u.Driver, u.DSN)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Ping(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
 // return port, ca, cert, key
 func createMySQLContainer(t *testing.T) (string, string, string, string) {
 	t.Helper()
