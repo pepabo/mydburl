@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.2.1](https://github.com/pepabo/mydburl/compare/v0.2.0...v0.2.1) - 2023-06-07
+- Bump golang.org/x/net from 0.3.0 to 0.7.0 by @dependabot in https://github.com/pepabo/mydburl/pull/7
+- Bump github.com/opencontainers/runc from 1.1.4 to 1.1.5 by @dependabot in https://github.com/pepabo/mydburl/pull/8
+- Bump github.com/docker/docker from 20.10.7+incompatible to 20.10.24+incompatible by @dependabot in https://github.com/pepabo/mydburl/pull/9
+
 ## [v0.2.0](https://github.com/pepabo/mydburl/compare/v0.1.0...v0.2.0) - 2022-12-08
 - Fix CI ( more simply ) by @k1LoW in https://github.com/pepabo/mydburl/pull/3
 - Add test by @k1LoW in https://github.com/pepabo/mydburl/pull/5
